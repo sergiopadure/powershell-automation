@@ -1,0 +1,95 @@
+<#
+.SYNOPSIS
+    This script has been created to pull the latest created AD groups for Meeting Rooms and create the actual meeting rooms from that
+.DESCRIPTION
+    The company had a system that created all the AD resources in advance and then we had to create the mailboxes from that. As I couldn't pull the names of the AD groups via an export or an API I wrote the script to find the latest groups created and then create the mailboxes from that.
+.NOTES
+    Author: Padure Sergio
+    Last edit: 2020-09/08
+#>
+
+#Defining variables
+$exchangeserver = http://somethingsomething
+$emailOU = "OU=MailAccounts,DC=raindrops,DC=com"
+$mailprefix = "MAIL-MR-"
+$mailprefixwild = "$mailprefix*"
+$dlprefix = "DL-MAIL-MR"
+$dlprefixwild = "$dlprefix*"
+
+#Defining additional variables
+$when = (Get-Date).Date
+$scriptdir = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
+$outdir = "$scriptdir\Output"
+$indir = "$scriptdir\Input"
+$dateandtime = Get-Date -Format "dd_MM_yyyy_HH-mm"
+$ErrorActionPreference="SilentlyContinue"
+
+
+#Clearing screen from previous output
+cls
+
+#Connecting to Exchange On Premise
+$Session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri $exchangeserver -Authentication Kerberos
+Import-PSSession $Session -DisableNameChecking -AllowClobber
+
+
+
+#Getting the list of mailboxes created today
+$mailboxes = Get-ADUser -Filter { whencreated -ge $when } -SearchBase $emailOU -Properties * | Where-Object -Property 'name' -Like $mailprefixwild
+
+#Exporting list of AD groups created today
+Get-ADGroup -Filter {(name -like $dlprefixwild) -and (whencreated -ge $when)} | Select-Object -ExpandProperty 'name' | Out-File -FilePath "$outdir\ADGroups-$dateandtime.txt" -append
+
+#Creating and configuring Room Mailbox
+foreach ($mailbox in $mailboxes){
+    $name = $mailbox | Select-Object -ExpandProperty 'name'
+    $secname = $name -replace $mailprefix, $dlprefix
+    $secfullname = Get-ADGroup -Filter { SamAccountName -like $secname } | Select-Object -ExpandProperty 'SamAccountName'
+    $secforpermission = "OSS_NT1\$secfullname"
+    $displayname = $mailbox | Select-Object -ExpandProperty 'Displayname'
+    $fullpath = $mailbox | Select-Object -ExpandProperty 'DistinguishedName'
+    Enable-Mailbox -Identity $fullpath -Alias $name > $null
+    Start-Sleep -Seconds 3
+    Enable-DistributionGroup -Identity $secfullname > $null
+    Start-Sleep -Seconds 3
+    Set-DistributionGroup -Identity $secfullname -HiddenFromAddressListsEnabled $true > $null
+    Start-Sleep -Seconds 3
+    Set-mailbox $fullpath –type Room > $null
+    Start-Sleep -Seconds 3
+    Add-MailboxPermission -Identity $fullpath -User $secforpermission -AccessRights 'FullAccess' > $null
+    Start-Sleep -Seconds 3
+    Write-Host "$name Is done"
+}
+#Waiting a few seconds to be sure configuration is correctly implemented
+#Start-Sleep -Seconds 30
+
+#Configuring Calendar Processing
+foreach ($mailbox in $mailboxes){
+    $number = @()
+    $name = $mailbox | Select-Object -ExpandProperty 'PrimarySmtpAddress'
+    $displayname = $mailbox | Select-Object -ExpandProperty 'DisplayName'
+    #Regex to pull resource capacity from name
+    $regex = [regex]"\((.*)[p]\)"
+    $number = [regex]::match($displayname, $regex).Groups[1] | Select-Object -ExpandProperty 'Value'
+    Set-mailbox $name -ResourceCapacity $number > $null
+    Get-mailbox $name | select Displayname, ResourceCapacity
+    Set-mailbox $name -HiddenFromAddressListsEnabled $true
+    Set-CalendarProcessing -Identity $name -DeleteAttachments $true
+    Set-CalendarProcessing -Identity $name -DeleteSubject $false
+    Set-CalendarProcessing -Identity $name -DeleteComments $false
+    Set-CalendarProcessing -Identity $name -DeleteNonCalendarItems $true
+    Set-CalendarProcessing -Identity $name -AddOrganizerToSubject $true
+    Set-CalendarProcessing -Identity $name -RemovePrivateProperty $true
+    Set-CalendarProcessing -Identity $name -OrganizerInfo $true
+    Set-CalendarProcessing -Identity $name -AddNewRequestsTentatively $true
+    Set-CalendarProcessing -Identity $name -AutomateProcessing None -AllBookInPolicy $false -AllRequestInPolicy $false
+}
+
+#Outputting the .csv for migration
+$dateandtime = Get-Date -Format "dd_MM_yyyy_HH-mm"
+$obj = @()
+foreach ($mailbox in $mailboxes){
+    $mailaddress = $mailbox | Select-Object -ExpandProperty 'PrimarySmtpAddress'
+    $obj += New-Object -TypeName psobject -Property @{EmailAddress=$mailaddress}
+    }
+$obj | Select-Object EmailAddress | Export-Csv -Path "$outdir\CSVMigration_$dateandtime.csv" -NoTypeInformation
