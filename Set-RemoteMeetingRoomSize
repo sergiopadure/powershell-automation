@@ -1,0 +1,34 @@
+<#
+.SYNOPSIS
+    This scripts updates the Room Capacity for all the Meeting Rooms indicated in the CSV
+.DESCRIPTION
+    This script was created during Corona times to update all the Meeting Rooms to a lower capacity that would allow for social distancing
+.NOTES
+    Author: Padure Sergio
+    Last edit: 2020-09-08
+#>
+
+#Defining variables
+$meetinrooms = Import-Csv -Path "C:\temp\MeetingRooms.csv"
+
+#Starting the login panel for connecting to EXO
+Connect-ExchangeOnlineShell
+
+#Executing
+foreach($meetingroom in $meetinrooms){
+    #$meetingroom
+    $meetinroomname = $meetingroom | Select-Object -ExpandProperty 'Name'
+    $mailbox = "$meetinroomname Doesn't Exist"
+    $roomcapacity = $meetingroom | Select-Object -ExpandProperty 'Number'
+    $mailbox = Get-mailbox -filter "(RecipientTypeDetails -eq 'RoomMailbox') -and (Name -like '*$meetinroomname')"
+        if (-not $mailbox){
+            Write-Warning "$meetinroomname Doesn't exist"
+            Add-Content -Path C:\temp\MRFailed.txt -Value "$meetinroomname,$roomcapacity"
+            }else{
+            foreach($mail in $mailbox){
+                $mail2 = ($mail).PrimarySmtpAddress
+                Set-mailbox -Identity $mail2 -ResourceCapacity $roomcapacity
+            }
+    }
+
+}
