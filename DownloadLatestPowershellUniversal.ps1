@@ -1,7 +1,9 @@
 #Script do download the latest version of Powershell Universal Nigtly and save it to a local folder
-#Find latest installer
+# Find latest installer
 Clear-Host
 $destination = "C:\temp\Nightly\"
+$iispath = "C:\inetpub\PowerShellUniversal"
+$dateandtime = Get-Date -Format "dd_MM_yyyy_HH-mm"
 $url = 'https://imsreleases.blob.core.windows.net/universal-nightly?restype=container&comp=list'
 
 $xml = Invoke-WebRequest $url -UseBasicParsing | Select-Object -ExpandProperty 'Content'
@@ -18,6 +20,14 @@ $array = $OutName -split '/'
 $Number = $array[0]
 $Name2 = $array[1]
 $Name = [IO.Path]::GetFileNameWithoutExtension($Name2)
-$dst = $destination + $Name + "_" + $Number + ".zip"
 
-Invoke-WebRequest $todownload.Url -OutFile $dst
+$dst = $destination + $Name + "_" + $Number + ".zip"
+$exists = Test-Path -Path $dst
+If ($exists){
+    Write-Host "File already exists, no action required"
+} else {
+    Invoke-WebRequest $todownload.Url -OutFile $dst
+    $newpath = $iispath + "_" + $dateandtime
+    Rename-Item $iispath $newpath
+    Expand-Archive -LiteralPath $dst -DestinationPath $iispath
+}
