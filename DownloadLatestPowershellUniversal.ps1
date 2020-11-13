@@ -1,5 +1,5 @@
 #Script do download the latest version of Powershell Universal Nigtly and save it to a local folder
-# Find latest installer
+#Find latest installer
 Clear-Host
 $destination = "C:\temp\Nightly\"
 $url = 'https://imsreleases.blob.core.windows.net/universal-nightly?restype=container&comp=list'
