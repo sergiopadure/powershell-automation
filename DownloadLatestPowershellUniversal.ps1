@@ -27,7 +27,9 @@ If ($exists){
     Write-Host "File already exists, no action required"
 } else {
     Invoke-WebRequest $todownload.Url -OutFile $dst
+    Stop-Website -name "Powershell Universal"
     $newpath = $iispath + "_" + $dateandtime
     Rename-Item $iispath $newpath
     Expand-Archive -LiteralPath $dst -DestinationPath $iispath
+    Start-Website -name "Powershell Universal"
 }
