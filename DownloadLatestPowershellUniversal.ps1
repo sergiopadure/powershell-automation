@@ -15,7 +15,7 @@ Clear-Host
 #Variable for the folder to store the temporary files in
 $destination = ""
 #Powershell where the Powershell Universal binary is
-$iispath = "C:\inetpub\PowerShellUniversal"
+$iispath = ""
 
 #Setting up other vars
 $dateandtime = Get-Date -Format "dd_MM_yyyy_HH-mm"
