@@ -40,14 +40,25 @@ $dst = $destination + $Name + "_" + $Number + ".zip"
 
 #Testing if the file is already present
 $exists = Test-Path -Path $dst
-If ($exists){
+If ($exists) {
     Write-Host "File already exists, no action required"
-} else {
-    #Executing download, renaming current folder of PU and unzipping the latest version into the good folder, with a start/stop of the website in IIS to avoid any additional issues
-    Invoke-WebRequest $todownload.Url -OutFile $dst
-    Stop-Website -name "Powershell Universal"
-    $newpath = $iispath + "_" + $dateandtime
-    Rename-Item $iispath $newpath
-    Expand-Archive -LiteralPath $dst -DestinationPath $iispath
-    Start-Website -name "Powershell Universal"
+}
+else {
+    try {
+        Stop-Website -name "Powershell Universal"
+        Invoke-WebRequest $todownload.Url -OutFile $dst
+        do {
+            Stop-Website -name "Powershell Universal"
+            $state = Get-Website -name "Powershell Universal" | Select-Object -ExpandProperty 'State'
+            Write-Warning "Website Still Running. State: $state"
+            Start-Sleep -Seconds 3
+        } until ($state -eq 'Stopped')
+        $newpath = $iispath + "_" + $dateandtime
+        Rename-Item $iispath $newpath -ErrorAction Stop
+        Expand-Archive -LiteralPath $dst -DestinationPath $iispath -ErrorAction Stop
+        Start-Website -name "Powershell Universal" -ErrorAction Stop
+    }
+    catch {
+        $_
+    }
 }
